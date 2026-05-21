@@ -294,7 +294,7 @@ with col_map:
     debug_mode = st.checkbox("🔧 좌표 디버그 모드 (클릭 위치 확인용)", value=st.session_state.debug_mode)
     st.session_state.debug_mode = debug_mode
 
-    img_path = "FullSizeRender.jpeg"
+    img_path = "FullSizeRender.jpg"
     if not os.path.exists(img_path):
         st.warning(f"지도 이미지를 찾을 수 없습니다: `{img_path}`")
         orig_img = None
