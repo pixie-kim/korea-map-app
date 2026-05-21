@@ -1,5 +1,4 @@
 # app.py
-# 실행 전 설치:
 # pip install streamlit pillow pandas streamlit-image-coordinates
 
 import streamlit as st
@@ -8,14 +7,7 @@ import pandas as pd
 import json
 import os
 
-# ─────────────────────────────────────────────
-# 페이지 설정
-# ─────────────────────────────────────────────
-st.set_page_config(
-    page_title="대한민국 행정구역 업체관리",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
+st.set_page_config(page_title="대한민국 행정구역 업체관리", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
 <style>
@@ -24,34 +16,17 @@ st.markdown("""
     .main { background-color: #f5f6fa; }
     .block-container { padding-top: 1.5rem; }
     h1 { font-size: 1.6rem !important; font-weight: 700; color: #1a1a2e; }
-    .region-badge {
-        display: inline-block; background: #1a1a2e; color: #fff;
-        border-radius: 6px; padding: 4px 14px; font-size: 1rem;
-        font-weight: 700; margin-bottom: 12px;
-    }
-    .company-card {
-        background: #ffffff; border: 1px solid #e0e0e0; border-radius: 10px;
-        padding: 14px 16px; margin-bottom: 12px;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-    }
+    .region-badge { display: inline-block; background: #1a1a2e; color: #fff; border-radius: 6px; padding: 4px 14px; font-size: 1rem; font-weight: 700; margin-bottom: 12px; }
     .stButton > button { border-radius: 8px; font-family: 'Noto Sans KR', sans-serif; font-weight: 500; }
-    .info-box {
-        background: #eef2ff; border-left: 4px solid #4361ee; border-radius: 6px;
-        padding: 10px 14px; font-size: 0.88rem; color: #333; margin-bottom: 12px;
-    }
+    .info-box { background: #eef2ff; border-left: 4px solid #4361ee; border-radius: 6px; padding: 10px 14px; font-size: 0.88rem; color: #333; margin-bottom: 12px; }
     .stat-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-    .stat-card {
-        background: #fff; border: 1px solid #e0e0e0; border-radius: 8px;
-        padding: 10px 18px; text-align: center; flex: 1; min-width: 80px;
-    }
+    .stat-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px 18px; text-align: center; flex: 1; min-width: 80px; }
     .stat-num { font-size: 1.4rem; font-weight: 700; color: #4361ee; }
     .stat-label { font-size: 0.75rem; color: #888; }
+    .debug-box { background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 8px 12px; font-size: 0.82rem; margin-top: 8px; }
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
-# 데이터 파일
-# ─────────────────────────────────────────────
 DATA_FILE = "companies.json"
 
 if "region_data" not in st.session_state:
@@ -67,200 +42,201 @@ if "selected_region" not in st.session_state:
 if "last_click" not in st.session_state:
     st.session_state.last_click = None
 
+if "debug_mode" not in st.session_state:
+    st.session_state.debug_mode = False
+
+if "last_raw_coords" not in st.session_state:
+    st.session_state.last_raw_coords = None
+
 # ─────────────────────────────────────────────
-# 행정구역 좌표 (이미지 1179×1450 기준, x, y, w, h)
-# 지도에 표시된 시·군·구 전체
+# 행정구역 좌표 (원본 이미지 1179×1450 픽셀 기준)
+# streamlit_image_coordinates 는 원본 좌표 그대로 반환
+# x, y, w, h
 # ─────────────────────────────────────────────
 REGIONS = {
-    # ── 특별시·광역시·특별자치시 ──
-    "서울":   (220, 195, 75, 55),
-    "인천":   (155, 205, 65, 60),
-    "대전":   (430, 535, 75, 60),
-    "세종":   (415, 495, 55, 42),
-    "대구":   (620, 655, 78, 60),
-    "광주":   (278, 730, 72, 58),
-    "울산":   (775, 690, 72, 58),
-    "부산":   (730, 765, 85, 65),
+    # 특별시·광역시
+    "서울":       (210, 190, 80, 60),
+    "인천":       (150, 200, 65, 65),
+    "대전":       (420, 530, 80, 65),
+    "세종":       (405, 490, 58, 45),
+    "대구":       (615, 648, 82, 65),
+    "광주":       (272, 725, 75, 62),
+    "울산":       (768, 685, 75, 62),
+    "부산":       (722, 758, 90, 70),
 
-    # ── 경기도 ──
-    "수원":   (215, 295, 50, 38),
-    "성남":   (245, 265, 48, 35),
-    "안양":   (210, 265, 40, 32),
-    "부천":   (175, 230, 45, 35),
-    "광명":   (190, 255, 38, 30),
-    "평택":   (210, 340, 58, 45),
-    "안성":   (270, 345, 52, 42),
-    "화성":   (175, 305, 55, 50),
-    "용인":   (255, 290, 55, 45),
-    "이천":   (300, 285, 52, 42),
-    "여주":   (340, 268, 52, 42),
-    "광주(경기)": (270, 248, 48, 38),
-    "하남":   (255, 235, 40, 28),
-    "구리":   (248, 218, 35, 25),
-    "남양주": (278, 210, 58, 38),
-    "의정부": (240, 190, 42, 30),
-    "양주":   (238, 170, 48, 35),
-    "동두천": (228, 152, 42, 30),
-    "포천":   (272, 155, 58, 50),
-    "가평":   (330, 175, 58, 50),
-    "양평":   (308, 248, 50, 40),
-    "고양":   (195, 190, 52, 35),
-    "파주":   (162, 168, 55, 48),
-    "김포":   (150, 205, 45, 38),
-    "연천":   (210, 135, 52, 42),
-    "안산":   (165, 270, 45, 40),
-    "시흥":   (170, 248, 38, 32),
-    "의왕":   (210, 278, 35, 28),
-    "군포":   (205, 285, 35, 28),
-    "과천":   (225, 270, 32, 25),
-    "오산":   (212, 318, 40, 32),
+    # 경기도
+    "수원":       (208, 288, 52, 40),
+    "성남":       (238, 258, 50, 38),
+    "안양":       (202, 260, 42, 35),
+    "부천":       (168, 225, 48, 38),
+    "광명":       (183, 248, 40, 32),
+    "평택":       (202, 332, 62, 48),
+    "안성":       (262, 338, 55, 45),
+    "화성":       (168, 298, 58, 52),
+    "용인":       (248, 282, 58, 48),
+    "이천":       (292, 278, 55, 45),
+    "여주":       (332, 260, 55, 45),
+    "광주(경기)": (262, 240, 50, 40),
+    "하남":       (248, 228, 42, 30),
+    "구리":       (240, 210, 38, 28),
+    "남양주":     (270, 202, 62, 40),
+    "의정부":     (232, 182, 45, 32),
+    "양주":       (230, 162, 50, 38),
+    "동두천":     (220, 144, 45, 32),
+    "포천":       (264, 147, 62, 52),
+    "가평":       (322, 168, 62, 52),
+    "양평":       (300, 240, 52, 42),
+    "고양":       (188, 182, 55, 38),
+    "파주":       (154, 160, 58, 50),
+    "김포":       (142, 197, 48, 40),
+    "연천":       (202, 127, 55, 45),
+    "안산":       (157, 262, 48, 42),
+    "시흥":       (162, 240, 40, 35),
+    "의왕":       (202, 270, 38, 30),
+    "군포":       (197, 278, 38, 30),
+    "과천":       (218, 262, 35, 28),
+    "오산":       (204, 310, 42, 35),
 
-    # ── 강원도 ──
-    "춘천":   (388, 165, 70, 60),
-    "홍천":   (448, 192, 80, 65),
-    "원주":   (378, 255, 60, 50),
-    "횡성":   (432, 242, 55, 45),
-    "평창":   (480, 228, 68, 55),
-    "강릉":   (560, 195, 62, 50),
-    "동해":   (580, 242, 50, 42),
-    "삼척":   (588, 272, 55, 50),
-    "태백":   (548, 258, 45, 42),
-    "정선":   (510, 245, 52, 48),
-    "영월":   (468, 268, 52, 48),
-    "제천":   (432, 295, 55, 48),
-    "충주":   (390, 295, 58, 48),
-    "단양":   (455, 278, 48, 38),
-    "화천":   (418, 138, 60, 45),
-    "양구":   (458, 135, 52, 42),
-    "인제":   (490, 148, 65, 58),
-    "고성(강원)": (510, 120, 52, 42),
-    "속초":   (535, 148, 42, 35),
-    "양양":   (548, 175, 45, 38),
-    "철원":   (355, 128, 65, 42),
+    # 강원도
+    "춘천":       (380, 157, 75, 65),
+    "홍천":       (440, 184, 85, 70),
+    "원주":       (370, 247, 65, 55),
+    "횡성":       (422, 234, 58, 48),
+    "평창":       (472, 220, 72, 58),
+    "강릉":       (552, 187, 65, 52),
+    "동해":       (572, 234, 52, 45),
+    "삼척":       (580, 263, 58, 52),
+    "태백":       (540, 250, 48, 45),
+    "정선":       (502, 237, 55, 50),
+    "영월":       (460, 260, 55, 50),
+    "제천":       (424, 287, 58, 50),
+    "충주":       (382, 287, 62, 50),
+    "단양":       (447, 270, 50, 40),
+    "화천":       (410, 130, 63, 48),
+    "양구":       (450, 127, 55, 45),
+    "인제":       (482, 140, 68, 62),
+    "고성(강원)": (502, 112, 55, 45),
+    "속초":       (527, 140, 45, 38),
+    "양양":       (540, 167, 48, 40),
+    "철원":       (347, 120, 68, 45),
 
-    # ── 충청북도 ──
-    "청주":   (418, 438, 72, 60),
-    "청원":   (408, 405, 62, 45),
-    "보은":   (448, 495, 58, 48),
-    "옥천":   (432, 538, 52, 42),
-    "영동":   (450, 568, 55, 45),
-    "진천":   (385, 408, 52, 42),
-    "음성":   (355, 378, 55, 45),
-    "증평":   (388, 388, 40, 32),
-    "괴산":   (418, 388, 55, 42),
-    "충주(시)": (392, 330, 58, 48),
+    # 충청북도
+    "청주":       (408, 428, 76, 64),
+    "보은":       (440, 487, 62, 50),
+    "옥천":       (422, 530, 55, 45),
+    "영동":       (440, 560, 58, 48),
+    "진천":       (376, 398, 55, 45),
+    "음성":       (346, 368, 58, 48),
+    "증평":       (378, 378, 42, 35),
+    "괴산":       (408, 378, 58, 45),
+    "충주(시)":   (382, 320, 62, 50),
 
-    # ── 충청남도 ──
-    "천안":   (318, 368, 68, 55),
-    "아산":   (285, 348, 58, 48),
-    "당진":   (222, 348, 58, 48),
-    "서산":   (175, 358, 58, 48),
-    "태안":   (145, 355, 45, 55),
-    "홍성":   (215, 405, 55, 45),
-    "예산":   (255, 395, 52, 42),
-    "공주":   (310, 435, 62, 50),
-    "보령":   (188, 448, 58, 50),
-    "청양":   (252, 438, 52, 42),
-    "부여":   (268, 475, 58, 48),
-    "서천":   (235, 505, 52, 45),
-    "논산":   (298, 498, 58, 48),
-    "금산":   (368, 535, 52, 45),
-    "계룡":   (318, 512, 38, 30),
+    # 충청남도
+    "천안":       (308, 358, 72, 58),
+    "아산":       (275, 338, 62, 50),
+    "당진":       (212, 338, 62, 50),
+    "서산":       (165, 348, 62, 50),
+    "태안":       (135, 345, 48, 58),
+    "홍성":       (205, 395, 58, 48),
+    "예산":       (245, 385, 55, 45),
+    "공주":       (300, 425, 65, 52),
+    "보령":       (178, 438, 62, 52),
+    "청양":       (242, 428, 55, 45),
+    "부여":       (258, 465, 62, 50),
+    "서천":       (225, 495, 55, 48),
+    "논산":       (288, 488, 62, 50),
+    "금산":       (358, 525, 55, 48),
+    "계룡":       (308, 502, 40, 32),
 
-    # ── 전라북도 ──
-    "전주":   (315, 598, 68, 58),
-    "익산":   (278, 572, 58, 50),
-    "군산":   (238, 558, 55, 48),
-    "김제":   (272, 615, 58, 50),
-    "완주":   (338, 582, 52, 45),
-    "부안":   (235, 638, 52, 50),
-    "정읍":   (265, 658, 58, 50),
-    "고창":   (238, 698, 55, 50),
-    "남원":   (355, 648, 62, 55),
-    "순창":   (318, 668, 52, 48),
-    "임실":   (330, 630, 50, 42),
-    "진안":   (368, 598, 52, 48),
-    "무주":   (408, 558, 55, 48),
-    "장수":   (378, 638, 52, 48),
+    # 전라북도
+    "전주":       (305, 588, 72, 62),
+    "익산":       (268, 562, 62, 52),
+    "군산":       (228, 548, 58, 50),
+    "김제":       (262, 605, 62, 52),
+    "완주":       (328, 572, 55, 48),
+    "부안":       (225, 628, 55, 52),
+    "정읍":       (255, 648, 62, 52),
+    "고창":       (228, 688, 58, 52),
+    "남원":       (345, 638, 65, 58),
+    "순창":       (308, 658, 55, 50),
+    "임실":       (320, 620, 52, 45),
+    "진안":       (358, 588, 55, 50),
+    "무주":       (398, 548, 58, 50),
+    "장수":       (368, 628, 55, 50),
 
-    # ── 전라남도 ──
-    "목포":   (205, 815, 48, 40),
-    "여수":   (388, 830, 58, 52),
-    "순천":   (358, 800, 60, 52),
-    "광양":   (390, 798, 48, 42),
-    "나주":   (268, 778, 55, 48),
-    "화순":   (308, 778, 52, 45),
-    "담양":   (305, 738, 50, 42),
-    "곡성":   (338, 758, 48, 42),
-    "구례":   (368, 768, 48, 42),
-    "장성":   (270, 728, 50, 42),
-    "영광":   (228, 718, 52, 45),
-    "함평":   (245, 748, 48, 42),
-    "무안":   (222, 778, 45, 38),
-    "신안":   (165, 790, 55, 60),
-    "진도":   (175, 848, 52, 48),
-    "해남":   (240, 848, 65, 55),
-    "강진":   (280, 848, 52, 48),
-    "장흥":   (310, 838, 52, 48),
-    "보성":   (338, 808, 52, 48),
-    "고흥":   (360, 840, 62, 55),
-    "완도":   (290, 882, 62, 52),
-    "영암":   (248, 812, 50, 42),
+    # 전라남도
+    "목포":       (195, 805, 50, 42),
+    "여수":       (378, 820, 62, 55),
+    "순천":       (348, 790, 64, 55),
+    "광양":       (380, 788, 50, 45),
+    "나주":       (258, 768, 58, 50),
+    "화순":       (298, 768, 55, 48),
+    "담양":       (295, 728, 52, 45),
+    "곡성":       (328, 748, 50, 45),
+    "구례":       (358, 758, 50, 45),
+    "장성":       (260, 718, 52, 45),
+    "영광":       (218, 708, 55, 48),
+    "함평":       (235, 738, 50, 45),
+    "무안":       (212, 768, 48, 40),
+    "신안":       (155, 780, 58, 62),
+    "진도":       (165, 838, 55, 50),
+    "해남":       (230, 838, 68, 58),
+    "강진":       (270, 838, 55, 50),
+    "장흥":       (300, 828, 55, 50),
+    "보성":       (328, 798, 55, 50),
+    "고흥":       (350, 830, 65, 58),
+    "완도":       (280, 872, 65, 55),
+    "영암":       (238, 802, 52, 45),
 
-    # ── 경상북도 ──
-    "포항":   (692, 498, 72, 62),
-    "경주":   (678, 562, 75, 65),
-    "안동":   (625, 435, 80, 68),
-    "구미":   (575, 518, 68, 55),
-    "영주":   (578, 388, 60, 52),
-    "영천":   (655, 598, 62, 52),
-    "상주":   (548, 478, 62, 52),
-    "문경":   (512, 428, 62, 52),
-    "경산":   (650, 645, 58, 48),
-    "군위":   (615, 545, 55, 48),
-    "의성":   (598, 488, 58, 50),
-    "청송":   (648, 468, 55, 48),
-    "영양":   (668, 428, 52, 45),
-    "영덕":   (692, 455, 50, 45),
-    "청도":   (648, 680, 55, 48),
-    "고령":   (598, 680, 52, 48),
-    "성주":   (572, 598, 55, 48),
-    "칠곡":   (582, 622, 48, 40),
-    "예천":   (548, 428, 52, 45),
-    "봉화":   (608, 388, 62, 48),
-    "울진":   (672, 388, 55, 52),
-    "울릉":   (785, 195, 35, 30),
-    "김천":   (538, 548, 58, 50),
-    "철곡":   (582, 565, 45, 38),
+    # 경상북도
+    "포항":       (682, 488, 75, 65),
+    "경주":       (668, 552, 78, 68),
+    "안동":       (615, 425, 84, 72),
+    "구미":       (565, 508, 72, 58),
+    "영주":       (568, 378, 64, 55),
+    "영천":       (645, 588, 65, 55),
+    "상주":       (538, 468, 65, 55),
+    "문경":       (502, 418, 65, 55),
+    "경산":       (640, 635, 62, 50),
+    "군위":       (605, 535, 58, 50),
+    "의성":       (588, 478, 62, 52),
+    "청송":       (638, 458, 58, 50),
+    "영양":       (658, 418, 55, 48),
+    "영덕":       (682, 445, 52, 48),
+    "청도":       (638, 670, 58, 50),
+    "고령":       (588, 670, 55, 50),
+    "성주":       (562, 588, 58, 50),
+    "칠곡":       (572, 612, 50, 42),
+    "예천":       (538, 418, 55, 48),
+    "봉화":       (598, 378, 65, 50),
+    "울진":       (662, 378, 58, 55),
+    "김천":       (528, 538, 62, 52),
 
-    # ── 경상남도 ──
-    "창원":   (650, 760, 75, 62),
-    "진주":   (578, 778, 70, 60),
-    "통영":   (628, 828, 58, 52),
-    "사천":   (568, 812, 55, 48),
-    "김해":   (695, 782, 60, 52),
-    "밀양":   (668, 718, 62, 52),
-    "거제":   (695, 840, 65, 58),
-    "양산":   (725, 740, 55, 48),
-    "의령":   (615, 748, 52, 45),
-    "함안":   (635, 775, 52, 45),
-    "창녕":   (628, 718, 52, 48),
-    "고성(경남)": (600, 808, 52, 48),
-    "남해":   (568, 848, 58, 52),
-    "하동":   (498, 798, 55, 48),
-    "산청":   (538, 758, 55, 48),
-    "함양":   (505, 738, 52, 48),
-    "거창":   (528, 708, 55, 48),
-    "합천":   (568, 738, 58, 48),
+    # 경상남도
+    "창원":       (640, 750, 78, 65),
+    "진주":       (568, 768, 74, 63),
+    "통영":       (618, 818, 62, 55),
+    "사천":       (558, 802, 58, 50),
+    "김해":       (685, 772, 64, 55),
+    "밀양":       (658, 708, 65, 55),
+    "거제":       (685, 830, 68, 62),
+    "양산":       (715, 730, 58, 50),
+    "의령":       (605, 738, 55, 48),
+    "함안":       (625, 765, 55, 48),
+    "창녕":       (618, 708, 55, 50),
+    "고성(경남)": (590, 798, 55, 50),
+    "남해":       (558, 838, 62, 55),
+    "하동":       (488, 788, 58, 50),
+    "산청":       (528, 748, 58, 50),
+    "함양":       (495, 728, 55, 50),
+    "거창":       (518, 698, 58, 50),
+    "합천":       (558, 728, 62, 50),
 
-    # ── 제주특별자치도 ──
-    "제주":   (340, 955, 85, 65),
-    "서귀포": (340, 1010, 85, 55),
+    # 제주
+    "제주":       (330, 945, 88, 68),
+    "서귀포":     (330, 1000, 88, 58),
 }
 
-# ─────────────────────────────────────────────
-# 이미지 로드 & 오버레이
-# ─────────────────────────────────────────────
 @st.cache_data
 def load_image(path: str):
     return Image.open(path).convert("RGB")
@@ -270,48 +246,35 @@ def draw_overlay(img: Image.Image, selected: str) -> Image.Image:
     draw = ImageDraw.Draw(overlay)
     if selected in REGIONS:
         x, y, w, h = REGIONS[selected]
+        # 연한 핑크색으로 채우기
         draw.rectangle([x, y, x + w, y + h],
-                       fill=(67, 97, 238, 90),
-                       outline=(67, 97, 238, 230),
+                       fill=(255, 182, 193, 120),   # 연핑크 반투명
+                       outline=(220, 50, 90, 230),  # 진한 핑크 테두리
                        width=3)
     return overlay.convert("RGB")
 
-def detect_region(cx: int, cy: int, display_w: int, orig_w: int, orig_h: int) -> str | None:
+def detect_region(cx: int, cy: int) -> str | None:
     """
-    클릭 좌표(display 기준) → 원본 좌표로 변환 후 지역명 반환
-    streamlit_image_coordinates 는 display 픽셀 좌표를 반환하므로
-    비율로 원본 좌표계로 환산해야 함
+    streamlit_image_coordinates 는 원본 이미지 픽셀 좌표를 반환
+    → 스케일 변환 없이 바로 REGIONS 좌표와 비교
     """
-    scale = orig_w / display_w
-    display_h = int(orig_h / scale)  # 비율 유지
-    rx = int(cx * (orig_w / display_w))
-    ry = int(cy * (orig_h / display_h))
-
     matched = []
     for region, (bx, by, bw, bh) in REGIONS.items():
-        if bx <= rx <= bx + bw and by <= ry <= by + bh:
+        if bx <= cx <= bx + bw and by <= cy <= by + bh:
             matched.append((bw * bh, region))
     if matched:
-        matched.sort()   # 면적 작은(더 세밀한) 지역 우선
+        matched.sort()  # 면적 작은 지역 우선
         return matched[0][1]
     return None
 
-# 지도를 표시할 고정 너비 (px) — 이 값을 streamlit_image_coordinates 에도 동일하게 전달
-MAP_DISPLAY_WIDTH = 600
-
-# ─────────────────────────────────────────────
-# 저장
-# ─────────────────────────────────────────────
 def save_data():
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(st.session_state.region_data, f, ensure_ascii=False, indent=4)
 
-# ─────────────────────────────────────────────
-# 제목 & 통계
-# ─────────────────────────────────────────────
+# ── 제목 & 통계 ──
 st.title("🗺️ 대한민국 행정구역 업체관리")
 
-total_regions  = len([r for r, c in st.session_state.region_data.items() if c])
+total_regions   = len([r for r, c in st.session_state.region_data.items() if c])
 total_companies = sum(len(c) for c in st.session_state.region_data.values())
 
 st.markdown(f"""
@@ -322,19 +285,16 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
-# 레이아웃
-# ─────────────────────────────────────────────
 col_map, col_panel = st.columns([3, 2], gap="large")
 
-# ══════════════════════════════════════════════
-# 지도 영역
-# ══════════════════════════════════════════════
 with col_map:
     st.markdown("#### 📍 지도에서 지역을 클릭하세요")
-    st.markdown('<div class="info-box">지도를 클릭하면 해당 시·군이 선택됩니다.</div>', unsafe_allow_html=True)
 
-    img_path = "FullSizeRender.jpg"
+    # 디버그 모드 토글
+    debug_mode = st.checkbox("🔧 좌표 디버그 모드 (클릭 위치 확인용)", value=st.session_state.debug_mode)
+    st.session_state.debug_mode = debug_mode
+
+    img_path = "FullSizeRender.jpeg"
     if not os.path.exists(img_path):
         st.warning(f"지도 이미지를 찾을 수 없습니다: `{img_path}`")
         orig_img = None
@@ -347,24 +307,32 @@ with col_map:
         try:
             from streamlit_image_coordinates import streamlit_image_coordinates
 
-            coords = streamlit_image_coordinates(display_img, key="korea_map", width=MAP_DISPLAY_WIDTH)
+            # width 지정 없이 원본 좌표 그대로 사용
+            coords = streamlit_image_coordinates(display_img, key="korea_map", use_column_width=True)
 
             if coords and coords != st.session_state.last_click:
                 st.session_state.last_click = coords
-                detected = detect_region(
-                    coords["x"], coords["y"],
-                    MAP_DISPLAY_WIDTH,
-                    orig_img.width, orig_img.height
-                )
+                st.session_state.last_raw_coords = coords
+                detected = detect_region(coords["x"], coords["y"])
                 if detected:
                     st.session_state.selected_region = detected
                     st.rerun()
+
+            # 디버그: 클릭 좌표와 감지 결과 표시
+            if debug_mode and st.session_state.last_raw_coords:
+                c = st.session_state.last_raw_coords
+                detected_dbg = detect_region(c["x"], c["y"])
+                st.markdown(f"""
+                <div class="debug-box">
+                🖱️ 클릭 좌표: x={c['x']}, y={c['y']}<br>
+                🎯 감지된 지역: <b>{detected_dbg if detected_dbg else '없음 (좌표 범위 밖)'}</b>
+                </div>
+                """, unsafe_allow_html=True)
 
         except ImportError:
             st.image(display_img, use_container_width=True)
             st.warning("`pip install streamlit-image-coordinates` 후 재실행하세요.")
 
-    # selectbox fallback
     st.markdown("##### 또는 목록에서 선택")
     region_list = sorted(REGIONS.keys())
     sel_idx = region_list.index(st.session_state.selected_region) if st.session_state.selected_region in region_list else 0
@@ -373,9 +341,6 @@ with col_map:
         st.session_state.selected_region = chosen
         st.rerun()
 
-# ══════════════════════════════════════════════
-# 업체 관리 패널
-# ══════════════════════════════════════════════
 with col_panel:
     region = st.session_state.selected_region
     st.markdown(f'<div class="region-badge">📌 {region}</div>', unsafe_allow_html=True)
@@ -391,35 +356,28 @@ with col_panel:
 
     to_delete = None
     for idx, company in enumerate(companies):
-        st.markdown(f'<div class="company-card">', unsafe_allow_html=True)
-
-        name    = st.text_input("업체명 *",  value=company.get("name", ""),    key=f"name_{region}_{idx}",  placeholder="예) 홍길동 전자")
-        address = st.text_input("위치",       value=company.get("address", ""), key=f"addr_{region}_{idx}",  placeholder="예) 서울시 중구 명동길 12")
-        phone   = st.text_input("전화번호",   value=company.get("phone", ""),   key=f"phone_{region}_{idx}", placeholder="예) 02-1234-5678")
-
-        st.session_state.region_data[region][idx] = {"name": name, "address": address, "phone": phone}
-
-        if st.button("🗑️ 삭제", key=f"del_{region}_{idx}", use_container_width=True):
-            to_delete = idx
-
-        st.markdown('</div>', unsafe_allow_html=True)
+        with st.container():
+            name    = st.text_input("업체명 *", value=company.get("name", ""),    key=f"name_{region}_{idx}",  placeholder="예) 홍길동 전자")
+            address = st.text_input("위치",      value=company.get("address", ""), key=f"addr_{region}_{idx}",  placeholder="예) 충북 괴산군 괴산읍")
+            phone   = st.text_input("전화번호",  value=company.get("phone", ""),   key=f"phone_{region}_{idx}", placeholder="예) 043-123-4567")
+            st.session_state.region_data[region][idx] = {"name": name, "address": address, "phone": phone}
+            if st.button("🗑️ 삭제", key=f"del_{region}_{idx}", use_container_width=True):
+                to_delete = idx
+            st.markdown("---")
 
     if to_delete is not None:
         st.session_state.region_data[region].pop(to_delete)
         save_data()
         st.rerun()
 
-    st.markdown("---")
     btn1, btn2 = st.columns(2)
-
     with btn1:
         if st.button("➕ 업체 추가", use_container_width=True):
             st.session_state.region_data[region].append({"name": "", "address": "", "phone": ""})
             st.rerun()
-
     with btn2:
         if st.button("💾 저장", type="primary", use_container_width=True):
-            valid = [c for c in st.session_state.region_data[region] if c.get("name", "").strip()]
+            valid   = [c for c in st.session_state.region_data[region] if c.get("name", "").strip()]
             dropped = len(st.session_state.region_data[region]) - len(valid)
             st.session_state.region_data[region] = valid
             save_data()
@@ -428,9 +386,6 @@ with col_panel:
             else:
                 st.success(f"✅ {region} 업체 정보 저장 완료!")
 
-# ─────────────────────────────────────────────
-# 전체 데이터 테이블
-# ─────────────────────────────────────────────
 st.markdown("---")
 st.markdown("#### 📋 전체 등록 업체")
 
