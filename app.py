@@ -1,12 +1,23 @@
 # app.py
 # pip install streamlit pillow pandas streamlit-image-coordinates
 
+import pathlib
+import json
 import streamlit as st
 from PIL import Image, ImageDraw
+from streamlit_image_coordinates import streamlit_image_coordinates
 import pandas as pd
-import json
-import os
 
+# ─────────────────────────────────────────────
+# 경로 설정 (Streamlit Cloud 호환)
+# ─────────────────────────────────────────────
+BASE_DIR  = pathlib.Path(__file__).parent
+IMG_PATH  = BASE_DIR / "FullSizeRender.jpeg"
+DATA_FILE = BASE_DIR / "companies.json"
+
+# ─────────────────────────────────────────────
+# 페이지 설정
+# ─────────────────────────────────────────────
 st.set_page_config(page_title="대한민국 행정구역 업체관리", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
@@ -16,25 +27,30 @@ st.markdown("""
     .main { background-color: #f5f6fa; }
     .block-container { padding-top: 1.5rem; }
     h1 { font-size: 1.6rem !important; font-weight: 700; color: #1a1a2e; }
-    .region-badge { display: inline-block; background: #1a1a2e; color: #fff; border-radius: 6px; padding: 4px 14px; font-size: 1rem; font-weight: 700; margin-bottom: 12px; }
+    .region-badge {
+        display: inline-block; background: #1a1a2e; color: #fff;
+        border-radius: 6px; padding: 4px 14px; font-size: 1rem; font-weight: 700; margin-bottom: 12px;
+    }
     .stButton > button { border-radius: 8px; font-family: 'Noto Sans KR', sans-serif; font-weight: 500; }
-    .info-box { background: #eef2ff; border-left: 4px solid #4361ee; border-radius: 6px; padding: 10px 14px; font-size: 0.88rem; color: #333; margin-bottom: 12px; }
     .stat-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-    .stat-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px 18px; text-align: center; flex: 1; min-width: 80px; }
+    .stat-card {
+        background: #fff; border: 1px solid #e0e0e0; border-radius: 8px;
+        padding: 10px 18px; text-align: center; flex: 1; min-width: 80px;
+    }
     .stat-num { font-size: 1.4rem; font-weight: 700; color: #4361ee; }
     .stat-label { font-size: 0.75rem; color: #888; }
-    .debug-box { background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 8px 12px; font-size: 0.82rem; margin-top: 8px; }
+    .debug-box {
+        background: #fff3cd; border: 1px solid #ffc107;
+        border-radius: 6px; padding: 8px 12px; font-size: 0.82rem; margin-top: 8px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-DATA_FILE = "companies.json"
-
+# ─────────────────────────────────────────────
+# session_state 초기화
+# ─────────────────────────────────────────────
 if "region_data" not in st.session_state:
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            st.session_state.region_data = json.load(f)
-    else:
-        st.session_state.region_data = {}
+    st.session_state.region_data = {}
 
 if "selected_region" not in st.session_state:
     st.session_state.selected_region = "서울"
@@ -42,19 +58,14 @@ if "selected_region" not in st.session_state:
 if "last_click" not in st.session_state:
     st.session_state.last_click = None
 
-if "debug_mode" not in st.session_state:
-    st.session_state.debug_mode = False
-
 if "last_raw_coords" not in st.session_state:
     st.session_state.last_raw_coords = None
 
 # ─────────────────────────────────────────────
-# 행정구역 좌표 (원본 이미지 1179×1450 픽셀 기준)
-# streamlit_image_coordinates 는 원본 좌표 그대로 반환
-# x, y, w, h
+# 행정구역 좌표 (원본 이미지 1179×1450 기준, x, y, w, h)
 # ─────────────────────────────────────────────
 REGIONS = {
-    # 특별시·광역시
+    # 특별시·광역시·특별자치시
     "서울":       (210, 190, 80, 60),
     "인천":       (150, 200, 65, 65),
     "대전":       (420, 530, 80, 65),
@@ -129,7 +140,6 @@ REGIONS = {
     "음성":       (346, 368, 58, 48),
     "증평":       (378, 378, 42, 35),
     "괴산":       (408, 378, 58, 45),
-    "충주(시)":   (382, 320, 62, 50),
 
     # 충청남도
     "천안":       (308, 358, 72, 58),
@@ -237,41 +247,58 @@ REGIONS = {
     "서귀포":     (330, 1000, 88, 58),
 }
 
+# ─────────────────────────────────────────────
+# 이미지 로드 (캐싱)
+# ─────────────────────────────────────────────
 @st.cache_data
-def load_image(path: str):
-    return Image.open(path).convert("RGB")
+def load_image():
+    return Image.open(IMG_PATH).convert("RGB")
 
+# ─────────────────────────────────────────────
+# 선택 지역 핑크 하이라이트
+# ─────────────────────────────────────────────
 def draw_overlay(img: Image.Image, selected: str) -> Image.Image:
     overlay = img.copy().convert("RGBA")
     draw = ImageDraw.Draw(overlay)
     if selected in REGIONS:
         x, y, w, h = REGIONS[selected]
-        # 연한 핑크색으로 채우기
-        draw.rectangle([x, y, x + w, y + h],
-                       fill=(255, 182, 193, 120),   # 연핑크 반투명
-                       outline=(220, 50, 90, 230),  # 진한 핑크 테두리
-                       width=3)
+        draw.rectangle(
+            [x, y, x + w, y + h],
+            fill=(255, 182, 193, 120),   # 연핑크 반투명
+            outline=(220, 50, 90, 230),  # 진한 핑크 테두리
+            width=3
+        )
     return overlay.convert("RGB")
 
+# ─────────────────────────────────────────────
+# 클릭 좌표 → 지역명 (면적 작은 지역 우선)
+# ─────────────────────────────────────────────
 def detect_region(cx: int, cy: int) -> str | None:
-    """
-    streamlit_image_coordinates 는 원본 이미지 픽셀 좌표를 반환
-    → 스케일 변환 없이 바로 REGIONS 좌표와 비교
-    """
     matched = []
     for region, (bx, by, bw, bh) in REGIONS.items():
         if bx <= cx <= bx + bw and by <= cy <= by + bh:
             matched.append((bw * bh, region))
     if matched:
-        matched.sort()  # 면적 작은 지역 우선
+        matched.sort()
         return matched[0][1]
     return None
 
-def save_data():
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(st.session_state.region_data, f, ensure_ascii=False, indent=4)
+# ─────────────────────────────────────────────
+# 데이터 저장 (CSV 다운로드용 직렬화)
+# ─────────────────────────────────────────────
+def get_csv() -> bytes:
+    rows = []
+    for r, comps in st.session_state.region_data.items():
+        for c in comps:
+            if c.get("name", "").strip():
+                rows.append({"지역": r, "업체명": c["name"], "위치": c.get("address",""), "전화번호": c.get("phone","")})
+    if not rows:
+        return "지역,업체명,위치,전화번호\n".encode("utf-8-sig")
+    return pd.DataFrame(rows).to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
 
-# ── 제목 & 통계 ──
+# ─────────────────────────────────────────────
+# 제목 & 통계
+# ─────────────────────────────────────────────
 st.title("🗺️ 대한민국 행정구역 업체관리")
 
 total_regions   = len([r for r, c in st.session_state.region_data.items() if c])
@@ -285,62 +312,48 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# ─────────────────────────────────────────────
+# 레이아웃
+# ─────────────────────────────────────────────
 col_map, col_panel = st.columns([3, 2], gap="large")
 
+# ── 지도 영역 ──
 with col_map:
     st.markdown("#### 📍 지도에서 지역을 클릭하세요")
 
-    # 디버그 모드 토글
-    debug_mode = st.checkbox("🔧 좌표 디버그 모드 (클릭 위치 확인용)", value=st.session_state.debug_mode)
-    st.session_state.debug_mode = debug_mode
+    debug_mode = st.checkbox("🔧 좌표 디버그 모드")
 
-    img_path = "FullSizeRender.jpeg"
-    if not os.path.exists(img_path):
-        st.warning(f"지도 이미지를 찾을 수 없습니다: `{img_path}`")
-        orig_img = None
-    else:
-        orig_img = load_image(img_path)
+    orig_img     = load_image()
+    display_img  = draw_overlay(orig_img, st.session_state.selected_region)
+    coords       = streamlit_image_coordinates(display_img, key="korea_map", use_column_width=True)
 
-    if orig_img is not None:
-        display_img = draw_overlay(orig_img, st.session_state.selected_region)
+    if coords and coords != st.session_state.last_click:
+        st.session_state.last_click      = coords
+        st.session_state.last_raw_coords = coords
+        detected = detect_region(coords["x"], coords["y"])
+        if detected:
+            st.session_state.selected_region = detected
+            st.rerun()
 
-        try:
-            from streamlit_image_coordinates import streamlit_image_coordinates
-
-            # width 지정 없이 원본 좌표 그대로 사용
-            coords = streamlit_image_coordinates(display_img, key="korea_map", use_column_width=True)
-
-            if coords and coords != st.session_state.last_click:
-                st.session_state.last_click = coords
-                st.session_state.last_raw_coords = coords
-                detected = detect_region(coords["x"], coords["y"])
-                if detected:
-                    st.session_state.selected_region = detected
-                    st.rerun()
-
-            # 디버그: 클릭 좌표와 감지 결과 표시
-            if debug_mode and st.session_state.last_raw_coords:
-                c = st.session_state.last_raw_coords
-                detected_dbg = detect_region(c["x"], c["y"])
-                st.markdown(f"""
-                <div class="debug-box">
-                🖱️ 클릭 좌표: x={c['x']}, y={c['y']}<br>
-                🎯 감지된 지역: <b>{detected_dbg if detected_dbg else '없음 (좌표 범위 밖)'}</b>
-                </div>
-                """, unsafe_allow_html=True)
-
-        except ImportError:
-            st.image(display_img, use_container_width=True)
-            st.warning("`pip install streamlit-image-coordinates` 후 재실행하세요.")
+    if debug_mode and st.session_state.last_raw_coords:
+        c   = st.session_state.last_raw_coords
+        dbg = detect_region(c["x"], c["y"])
+        st.markdown(f"""
+        <div class="debug-box">
+        🖱️ 클릭 좌표: x={c['x']}, y={c['y']}<br>
+        🎯 감지된 지역: <b>{dbg if dbg else '없음 (좌표 범위 밖)'}</b>
+        </div>
+        """, unsafe_allow_html=True)
 
     st.markdown("##### 또는 목록에서 선택")
     region_list = sorted(REGIONS.keys())
-    sel_idx = region_list.index(st.session_state.selected_region) if st.session_state.selected_region in region_list else 0
-    chosen = st.selectbox("행정구역", region_list, index=sel_idx, label_visibility="collapsed")
+    sel_idx     = region_list.index(st.session_state.selected_region) if st.session_state.selected_region in region_list else 0
+    chosen      = st.selectbox("행정구역", region_list, index=sel_idx, label_visibility="collapsed")
     if chosen != st.session_state.selected_region:
         st.session_state.selected_region = chosen
         st.rerun()
 
+# ── 업체 관리 패널 ──
 with col_panel:
     region = st.session_state.selected_region
     st.markdown(f'<div class="region-badge">📌 {region}</div>', unsafe_allow_html=True)
@@ -357,9 +370,9 @@ with col_panel:
     to_delete = None
     for idx, company in enumerate(companies):
         with st.container():
-            name    = st.text_input("업체명 *", value=company.get("name", ""),    key=f"name_{region}_{idx}",  placeholder="예) 홍길동 전자")
-            address = st.text_input("위치",      value=company.get("address", ""), key=f"addr_{region}_{idx}",  placeholder="예) 충북 괴산군 괴산읍")
-            phone   = st.text_input("전화번호",  value=company.get("phone", ""),   key=f"phone_{region}_{idx}", placeholder="예) 043-123-4567")
+            name    = st.text_input("업체명 *", value=company.get("name", ""),    key=f"name_{region}_{idx}", placeholder="예) 홍길동 전자")
+            address = st.text_input("위치",      value=company.get("address", ""), key=f"addr_{region}_{idx}", placeholder="예) 충북 괴산군 괴산읍")
+            phone   = st.text_input("전화번호",  value=company.get("phone", ""),   key=f"phon_{region}_{idx}", placeholder="예) 043-123-4567")
             st.session_state.region_data[region][idx] = {"name": name, "address": address, "phone": phone}
             if st.button("🗑️ 삭제", key=f"del_{region}_{idx}", use_container_width=True):
                 to_delete = idx
@@ -367,7 +380,6 @@ with col_panel:
 
     if to_delete is not None:
         st.session_state.region_data[region].pop(to_delete)
-        save_data()
         st.rerun()
 
     btn1, btn2 = st.columns(2)
@@ -376,29 +388,30 @@ with col_panel:
             st.session_state.region_data[region].append({"name": "", "address": "", "phone": ""})
             st.rerun()
     with btn2:
+        valid   = [c for c in companies if c.get("name", "").strip()]
+        dropped = len(companies) - len(valid)
         if st.button("💾 저장", type="primary", use_container_width=True):
-            valid   = [c for c in st.session_state.region_data[region] if c.get("name", "").strip()]
-            dropped = len(st.session_state.region_data[region]) - len(valid)
             st.session_state.region_data[region] = valid
-            save_data()
             if dropped:
-                st.warning(f"업체명 없는 항목 {dropped}개 제외 후 저장되었습니다.")
+                st.warning(f"업체명 없는 항목 {dropped}개 제외되었습니다.")
             else:
-                st.success(f"✅ {region} 업체 정보 저장 완료!")
+                st.success(f"✅ {region} 저장 완료!")
 
+# ─────────────────────────────────────────────
+# 전체 데이터 테이블 & CSV 다운로드
+# ─────────────────────────────────────────────
 st.markdown("---")
 st.markdown("#### 📋 전체 등록 업체")
 
-all_rows = []
-for r, comps in st.session_state.region_data.items():
-    for c in comps:
-        if c.get("name", "").strip():
-            all_rows.append({"지역": r, "업체명": c.get("name",""), "위치": c.get("address",""), "전화번호": c.get("phone","")})
+all_rows = [
+    {"지역": r, "업체명": c["name"], "위치": c.get("address",""), "전화번호": c.get("phone","")}
+    for r, comps in st.session_state.region_data.items()
+    for c in comps if c.get("name","").strip()
+]
 
 if all_rows:
-    df = pd.DataFrame(all_rows)
-    st.dataframe(df, use_container_width=True, hide_index=True)
-    csv = df.to_csv(index=False, encoding="utf-8-sig")
-    st.download_button("📥 CSV 다운로드", data=csv, file_name="업체목록.csv", mime="text/csv")
+    st.dataframe(pd.DataFrame(all_rows), use_container_width=True, hide_index=True)
 else:
     st.info("아직 등록된 업체가 없습니다.")
+
+st.download_button("📥 CSV 다운로드", data=get_csv(), file_name="업체목록.csv", mime="text/csv")
